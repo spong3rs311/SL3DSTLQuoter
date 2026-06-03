@@ -71,9 +71,12 @@ saguaro-labs-quote-tool/
 │   ├── widget.css         # Widget styles (scoped to avoid Squarespace conflicts)
 │   └── stl-parser.js      # STL volume + bounding box calculation (client-side)
 ├── api/
+│   ├── upload-stl.js      # POST /api/upload-stl — pre-upload STL to temp Drive folder
 │   ├── create-checkout.js # POST /api/create-checkout — creates Stripe Checkout session
-│   ├── webhook.js         # POST /api/webhook — Stripe webhook: save to Drive, notify owner
-│   └── manual-quote.js    # POST /api/manual-quote — fallback: save to Drive, notify owner
+│   ├── webhook.js         # POST /api/webhook — Stripe webhook: move file, notify owner + customer
+│   ├── manual-quote.js    # POST /api/manual-quote — fallback: save to Drive, notify owner
+│   └── cron/
+│       └── cleanup.js     # DELETE temp Drive files >24h old with no completed payment
 ├── config.json            # All pricing parameters — owner edits this file
 ├── dist/
 │   └── widget.min.js      # Built widget (deployed to Vercel, embedded in Squarespace)
@@ -171,15 +174,19 @@ flag supports as likely needed and apply support_multiplier.
 1. Customer visits Saguaro Labs 3D Squarespace page with embedded widget
 2. Selects filament type and strength preset from dropdowns
 3. Uploads STL file (drag-and-drop or file picker)
-4. Browser parses STL client-side — calculates volume, bounding box, support heuristic
-5. Widget displays: price, estimated weight, estimated print time, selected settings
-6. Customer enters name and email address
-7. Clicks "Accept & Pay"
-8. Browser POSTs to `/api/create-checkout` with quote data (no STL — file sent separately)
+4. If file exceeds 50MB: show message explaining auto-quoting is unavailable at this size,
+   direct customer to the manual quote form below
+5. Browser parses STL client-side — calculates volume, bounding box, support heuristic
+6. Widget displays: price, estimated weight, estimated print time, selected settings
+7. Customer enters name and email address
+8. Clicks "Accept & Pay" — STL is uploaded to a temp Google Drive folder immediately,
+   before Stripe redirect (so file is safe regardless of payment outcome)
 9. Redirected to Stripe Checkout
 10. On payment success: Stripe fires webhook to `/api/webhook`
-11. Webhook uploads STL to Google Drive, sends notification email to owner
-12. Customer sees Stripe's confirmation page
+11. Webhook moves STL from temp folder to permanent Orders folder, sends branded
+    confirmation email to customer and notification email to owner
+12. If Drive move fails/times out: owner notified with temp file link + customer contact;
+    customer still receives confirmation email — no data lost
 
 ## Customer Flow (Failed STL)
 
@@ -197,6 +204,13 @@ flag supports as likely needed and apply support_multiplier.
 
 ## API Endpoints
 
+### `POST /api/upload-stl`
+Called immediately when customer clicks "Accept & Pay", before Stripe redirect.
+**Request:** `multipart/form-data` with `stl_file`, `customer_name`, `customer_email`, `quote_details`
+**Response:** `{ "temp_file_id": "1abc...xyz", "temp_file_name": "..." }`
+Saves STL to `Saguaro Labs 3D / Temp / {uuid}-{filename}`. Temp files older than 24 hours
+with no associated completed payment are cleaned up by a scheduled Vercel cron job.
+
 ### `POST /api/create-checkout`
 **Request:**
 ```json
@@ -208,6 +222,7 @@ flag supports as likely needed and apply support_multiplier.
   "price_cents": 1540,
   "stl_filename": "bracket.stl",
   "stl_size_bytes": 204800,
+  "temp_file_id": "1abc...xyz",
   "quote_details": {
     "weight_g": 42.3,
     "print_time_hours": 1.8,
@@ -218,12 +233,16 @@ flag supports as likely needed and apply support_multiplier.
 **Response:** `{ "checkout_url": "https://checkout.stripe.com/..." }`
 
 Server re-derives price from quote_details + config to prevent client-side tampering.
+`temp_file_id` is stored in Stripe session metadata for the webhook to use.
 
 ### `POST /api/webhook`
 Stripe webhook (signature verified). On `checkout.session.completed`:
-- Retrieve session metadata
-- Upload STL to Google Drive: `Saguaro Labs 3D / Orders / YYYY-MM / {timestamp}-{customer-name}-{filename}`
-- Send notification email to info@saguarolabs3d.com
+- Retrieve session metadata (includes `temp_file_id`)
+- Move STL from `Temp/` to `Orders / YYYY-MM / {timestamp}-{customer-name}-{filename}`
+- Send branded confirmation email to customer (from info@saguarolabs3d.com)
+- Send notification email to owner at info@saguarolabs3d.com with Drive link + order details
+- On Drive move failure: notify owner with temp file link + customer contact; send customer
+  confirmation email regardless so they are not left without acknowledgement
 
 ### `POST /api/manual-quote`
 **Request:** `multipart/form-data` with `name`, `email`, `note`, `stl_file`
@@ -243,7 +262,8 @@ STRIPE_PUBLISHABLE_KEY=pk_live_...
 # Google Drive (service account)
 GOOGLE_SERVICE_ACCOUNT_EMAIL=quote-tool@your-project.iam.gserviceaccount.com
 GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n..."
-GOOGLE_DRIVE_FOLDER_ID=1abc...xyz   # Root "Saguaro Labs 3D" folder ID
+GOOGLE_DRIVE_FOLDER_ID=1abc...xyz         # Root "Saguaro Labs 3D" folder ID
+GOOGLE_DRIVE_TEMP_FOLDER_ID=1def...uvw   # "Temp" subfolder ID
 
 # Email (Gmail SMTP via Google Workspace)
 GMAIL_USER=info@saguarolabs3d.com
@@ -354,19 +374,24 @@ tests/
 - [ ] STL upload + price calculation completes in under 5 seconds for files up to 50MB
 - [ ] Price displayed matches the server-side re-derived price (no tampering possible)
 - [ ] Stripe Checkout opens with the correct amount in USD
-- [ ] On payment success, STL appears in Google Drive within 60 seconds
+- [ ] STL uploaded to temp Drive folder before Stripe redirect — file safe regardless of payment outcome
+- [ ] On payment success, STL moved to permanent Orders folder within 60 seconds
+- [ ] On Drive move failure: owner notified with temp link + customer contact; customer still receives confirmation
+- [ ] Customer receives branded confirmation email from info@saguarolabs3d.com on payment
 - [ ] Owner receives notification email at info@saguarolabs3d.com with order details + Drive link
+- [ ] STL files >50MB show clear message directing customer to manual quote form
 - [ ] Non-watertight or unparseable STL triggers fallback form with clear error message
 - [ ] Manual quote requests saved to Drive and owner notified with customer info
 - [ ] All pricing parameters updatable by editing `config.json` only — no code changes
+- [ ] Filament types extensible by adding a new object to the `filaments` array in `config.json`
 - [ ] Pricing unit tests pass for: standard calculation, minimum price floor, support multiplier, all four filament types
 
 ---
 
 ## Open Questions
 
-1. **Filament types:** The config pre-populates PLA, PETG, ABS, TPU. Do these match what you currently offer, or should some be added/removed before launch?
-2. **Customer confirmation email:** Should the customer receive a branded confirmation email from Saguaro Labs 3D, or is Stripe's default receipt sufficient?
-3. **Widget styling:** Are there brand colors or fonts from your Squarespace theme we should match?
-4. **STL file during checkout:** The STL is large — it can't be sent to Stripe. We hold it in the browser until payment confirms, then upload. Is a 60-second window acceptable, or do we need a pre-upload approach?
-5. **Failed STL size limit:** If a file is too large to parse (>50MB), should we still accept it for manual quoting, or reject with a "please contact us" message?
+~~1. Filament types~~ — **Resolved:** PLA, PETG, ABS, TPU. Array structure supports adding more via config only.
+~~2. Customer confirmation email~~ — **Resolved:** Branded HTML email from info@saguarolabs3d.com.
+~~3. Widget styling~~ — **Partially resolved:** Dark industrial/minimalist matching saguarolabs3d.com. Exact hex codes to be confirmed before widget implementation (owner to provide from Squarespace Styles panel).
+~~4. STL upload timing~~ — **Resolved:** Pre-upload to temp Drive folder before Stripe redirect; graceful failure handling if Drive move fails post-payment.
+~~5. Oversized STL handling~~ — **Resolved:** Files >50MB show clear message directing customer to manual quote form; not auto-rejected, not silently dropped.
