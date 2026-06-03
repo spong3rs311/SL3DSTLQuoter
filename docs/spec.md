@@ -148,7 +148,7 @@ The owner edits this file to update pricing. No code changes required.
 ## Pricing Formula
 
 ```
-filament_volume_cm3  = stl_volume_cm3 × infill_pct
+filament_volume_cm3  = stl_volume_cm3 × (infill_pct / 100)
 filament_weight_g    = filament_volume_cm3 × filament_density
 filament_cost        = filament_weight_g × (cost_per_kg / 1000)
 
@@ -182,11 +182,15 @@ flag supports as likely needed and apply support_multiplier.
 8. Clicks "Accept & Pay" — STL is uploaded to a temp Google Drive folder immediately,
    before Stripe redirect (so file is safe regardless of payment outcome)
 9. Redirected to Stripe Checkout
-10. On payment success: Stripe fires webhook to `/api/webhook`
-11. Webhook moves STL from temp folder to permanent Orders folder, sends branded
+10. Stripe redirects customer back to Squarespace quote page with `?status=success`
+11. Widget detects `?status=success` on page load and shows order confirmation message
+12. In parallel: Stripe fires webhook to `/api/webhook`
+13. Webhook moves STL from temp folder to permanent Orders folder, sends branded
     confirmation email to customer and notification email to owner
-12. If Drive move fails/times out: owner notified with temp file link + customer contact;
+14. If Drive move fails/times out: owner notified with temp file link + customer contact;
     customer still receives confirmation email — no data lost
+15. If customer cancels at Stripe: redirected back with `?status=cancelled`; widget shows
+    quote again so they can retry
 
 ## Customer Flow (Failed STL)
 
@@ -198,7 +202,7 @@ flag supports as likely needed and apply support_multiplier.
 5. Form POSTs to `/api/manual-quote`
 6. Backend saves STL to Google Drive (`Manual Quotes/` folder), emails owner with customer
    info and Drive link
-7. Customer sees confirmation: "Got it! We'll review your file and reach out to info@saguarolabs3d.com within 1 business day."
+7. Customer sees confirmation: "Got it! We'll review your file and reach out to you within 1 business day."
 
 ---
 
@@ -274,6 +278,7 @@ OWNER_EMAIL=info@saguarolabs3d.com
 
 # App
 NEXT_PUBLIC_API_BASE_URL=https://your-app.vercel.app
+SQUARESPACE_QUOTE_PAGE_URL=https://www.saguarolabs3d.com/quote
 ```
 
 ---
@@ -306,8 +311,8 @@ export default async function handler(req, res) {
     mode: 'payment',
     customer_email,
     metadata: { customer_name, filament_id, strength_preset, stl_filename, ...quote_details },
-    success_url: `${process.env.NEXT_PUBLIC_API_BASE_URL}/success`,
-    cancel_url: `${process.env.NEXT_PUBLIC_API_BASE_URL}/cancel`,
+    success_url: `${process.env.SQUARESPACE_QUOTE_PAGE_URL}?status=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.SQUARESPACE_QUOTE_PAGE_URL}?status=cancelled`,
   });
 
   res.json({ checkout_url: session.url });
@@ -334,6 +339,7 @@ tests/
 ├── stl-parser.test.js      # Volume calculation with known-geometry STL fixtures
 ├── pricing.test.js         # Pricing formula — edge cases, minimums, multipliers
 └── api/
+    ├── upload-stl.test.js        # Temp Drive upload, file validation (mocked)
     ├── create-checkout.test.js   # Price re-derivation, Stripe session creation (mocked)
     └── manual-quote.test.js      # File handling, Drive upload (mocked), email (mocked)
 ```
@@ -353,6 +359,7 @@ tests/
 - Scope all widget CSS with `.slq-` prefix
 - Validate STL file type and size before parsing
 - Use environment variables for all secrets — never hardcode
+- Set CORS headers on all API endpoints (Squarespace origin makes cross-origin requests)
 
 **Ask first:**
 - Adding new npm dependencies
