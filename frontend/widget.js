@@ -275,10 +275,21 @@ const HTML = `
 </div>
 `;
 
+var parseSTL  = require('./stl-parser').parseSTL;
+var calcPrice = require('./pricing').calcPrice;
+
+// Runtime state — reset on each new file
+var state = {
+  file:           null,
+  volume_cm3:     0,
+  supports_likely: false,
+  priceResult:    null,
+};
+
 function showPanel(name) {
   ['upload-zone', 'parsing', 'quote', 'manual', 'status'].forEach(function (id) {
     var el = document.getElementById('sl3d-' + id);
-    if (el) el.hidden = (id !== name && !(name === 'upload' && id === 'upload-zone'));
+    if (el) el.hidden = (id !== name);
   });
   var errEl = document.getElementById('sl3d-error');
   if (errEl) errEl.hidden = true;
@@ -290,6 +301,113 @@ function showError(msg) {
   el.textContent = msg;
   el.hidden = false;
 }
+
+// ── Price display ────────────────────────────────────────────────────────────
+
+function updatePrice() {
+  var filament = document.getElementById('sl3d-filament').value;
+  var preset   = document.getElementById('sl3d-strength').value;
+  var result   = calcPrice(state.volume_cm3, state.supports_likely, filament, preset);
+  var priceEl  = document.getElementById('sl3d-price');
+
+  if (result) {
+    priceEl.textContent = '$' + result.priceUsd;
+    state.priceResult = result;
+  } else {
+    priceEl.textContent = '—';
+    state.priceResult = null;
+  }
+  updatePayBtn();
+}
+
+function updatePayBtn() {
+  var btn   = document.getElementById('sl3d-pay-btn');
+  var name  = (document.getElementById('sl3d-name').value || '').trim();
+  var email = (document.getElementById('sl3d-email').value || '').trim();
+  var ready = !!(state.priceResult && name && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+  btn.disabled = !ready;
+}
+
+// ── STL file handling ────────────────────────────────────────────────────────
+
+function handleFile(file) {
+  if (!file.name.toLowerCase().endsWith('.stl')) {
+    showError('Only .stl files are supported. Use the form below for other file types.');
+    return;
+  }
+
+  showPanel('parsing');
+
+  var reader = new FileReader();
+
+  reader.onload = function (e) {
+    var result = parseSTL(e.target.result);
+
+    if (!result.is_valid) {
+      showPanel('manual');
+      showError(result.error || 'Could not parse this STL — please request a manual quote.');
+      return;
+    }
+
+    state.file            = file;
+    state.volume_cm3      = result.volume_cm3;
+    state.supports_likely = result.supports_likely;
+    state.priceResult     = null;
+
+    document.getElementById('sl3d-filename').textContent = file.name;
+    updatePrice();
+    showPanel('quote');
+  };
+
+  reader.onerror = function () {
+    showPanel('upload-zone');
+    showError('Failed to read the file — please try again.');
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Event wiring ─────────────────────────────────────────────────────────────
+
+function wireUploadZone() {
+  var zone  = document.getElementById('sl3d-upload-zone');
+  var input = document.getElementById('sl3d-file-input');
+
+  zone.addEventListener('click', function () { input.click(); });
+
+  input.addEventListener('change', function () {
+    if (input.files && input.files[0]) handleFile(input.files[0]);
+  });
+
+  zone.addEventListener('dragover', function (e) {
+    e.preventDefault();
+    zone.classList.add('sl3d-drag-over');
+  });
+  zone.addEventListener('dragleave', function () {
+    zone.classList.remove('sl3d-drag-over');
+  });
+  zone.addEventListener('drop', function (e) {
+    e.preventDefault();
+    zone.classList.remove('sl3d-drag-over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+}
+
+function wireQuotePanel() {
+  document.getElementById('sl3d-filament').addEventListener('change', updatePrice);
+  document.getElementById('sl3d-strength').addEventListener('change', updatePrice);
+  document.getElementById('sl3d-name').addEventListener('input', updatePayBtn);
+  document.getElementById('sl3d-email').addEventListener('input', updatePayBtn);
+
+  document.getElementById('sl3d-to-manual').addEventListener('click', function () {
+    showPanel('manual');
+  });
+  document.getElementById('sl3d-to-auto').addEventListener('click', function () {
+    showPanel('quote');
+  });
+}
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
 
 function init() {
   if (!document.getElementById('sl3d-styles')) {
@@ -304,12 +422,16 @@ function init() {
 
   container.innerHTML = HTML;
   showPanel('upload-zone');
+  wireUploadZone();
+  wireQuotePanel();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 }
 
-module.exports = { showPanel, showError };
+module.exports = { showPanel, showError, updatePrice, updatePayBtn, handleFile };
