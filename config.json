@@ -1,0 +1,41 @@
+{
+  "filaments": [
+    {
+      "id": "pla",
+      "name": "PLA",
+      "density_g_per_cm3": 1.24,
+      "cost_per_kg": 20.00
+    },
+    {
+      "id": "petg",
+      "name": "PETG",
+      "density_g_per_cm3": 1.27,
+      "cost_per_kg": 25.00
+    },
+    {
+      "id": "abs",
+      "name": "ABS",
+      "density_g_per_cm3": 1.04,
+      "cost_per_kg": 22.00
+    },
+    {
+      "id": "tpu",
+      "name": "TPU (Flexible)",
+      "density_g_per_cm3": 1.21,
+      "cost_per_kg": 35.00
+    }
+  ],
+  "strength_presets": {
+    "draft":    { "label": "Draft (Fast)",     "infill_pct": 10, "layer_height_mm": 0.30 },
+    "standard": { "label": "Standard",         "infill_pct": 20, "layer_height_mm": 0.20 },
+    "strong":   { "label": "Strong (Durable)", "infill_pct": 40, "layer_height_mm": 0.15 }
+  },
+  "machine_rate_per_hour": 2.50,
+  "labor_rate_per_hour": 25.00,
+  "overhead_rate_per_hour": 1.00,
+  "support_multiplier": 1.15,
+  "profit_margin_pct": 30,
+  "minimum_order_usd": 10.00,
+  "max_stl_size_mb": 50,
+  "print_speed_mm3_per_second": 8.0
+}
