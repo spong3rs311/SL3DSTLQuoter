@@ -13,6 +13,14 @@ const nodeGlobals = {
   clearTimeout: 'readonly',
   setInterval: 'readonly',
   clearInterval: 'readonly',
+  // Web APIs available in browsers and Node 20+
+  TextDecoder: 'readonly',
+  TextEncoder: 'readonly',
+  DataView: 'readonly',
+  ArrayBuffer: 'readonly',
+  Uint8Array: 'readonly',
+  Float32Array: 'readonly',
+  Infinity: 'readonly',
 };
 
 const jestGlobals = {
