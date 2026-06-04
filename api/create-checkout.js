@@ -1,15 +1,10 @@
 const Stripe = require('stripe');
 const { derivePrice } = require('./lib/pricing');
 const { loadConfig } = require('./lib/config');
-
-const ALLOWED_ORIGIN = 'https://www.saguarolabs3d.com';
+const { applyCors } = require('./lib/cors');
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   let body = req.body;
@@ -36,6 +31,13 @@ module.exports = async function handler(req, res) {
   if (!fileId || !driveLink || !filament_id || !strength_preset ||
       !volume_cm3 || !stl_filename || !customer_name || !customer_email) {
     return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  if (customer_name.length > 100) return res.status(400).json({ error: 'Name too long' });
+  if (customer_email.length > 254) return res.status(400).json({ error: 'Email too long' });
+  if (stl_filename.length > 255)   return res.status(400).json({ error: 'Filename too long' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer_email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
   }
 
   let priceResult;

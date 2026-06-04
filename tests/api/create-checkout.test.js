@@ -111,6 +111,37 @@ describe('field validation', () => {
   });
 });
 
+describe('input validation', () => {
+  it('returns 400 for an invalid email format', async () => {
+    const res = mockRes();
+    await handler({ method: 'POST', body: { ...VALID_BODY, customer_email: 'notanemail' } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid email address' });
+  });
+
+  it('returns 400 when customer_name exceeds 100 characters', async () => {
+    const res = mockRes();
+    await handler({ method: 'POST', body: { ...VALID_BODY, customer_name: 'a'.repeat(101) } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Name too long' });
+  });
+
+  it('returns 400 when customer_email exceeds 254 characters', async () => {
+    const res = mockRes();
+    const longEmail = 'a'.repeat(244) + '@example.com';
+    await handler({ method: 'POST', body: { ...VALID_BODY, customer_email: longEmail } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Email too long' });
+  });
+
+  it('returns 400 when stl_filename exceeds 255 characters', async () => {
+    const res = mockRes();
+    await handler({ method: 'POST', body: { ...VALID_BODY, stl_filename: 'a'.repeat(256) } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Filename too long' });
+  });
+});
+
 describe('happy path', () => {
   it('re-derives price server-side and creates a Stripe session', async () => {
     const res = mockRes();
