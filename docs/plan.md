@@ -669,5 +669,7 @@ Once Task 1 is complete:
 
 ## Open Questions
 
-None — all spec questions resolved. Brand hex codes still needed before Task 11 (widget
-styling), but scaffold can proceed with placeholder colors.
+None — all spec questions resolved. Brand palette confirmed from brand assets:
+- Background: `linear-gradient(135deg, #0D1117, #1A1F2E)`
+- Primary: `#00E5FF` (Cyber Cyan), Secondary: `#FF6D00` (Desert Orange)
+- Text: `#FFFFFF`, Gradient mid: `#00BCD4`, Gradient end: `#0D7FA0`

@@ -399,6 +399,14 @@ tests/
 
 ~~1. Filament types~~ — **Resolved:** PLA, PETG, ABS, TPU. Array structure supports adding more via config only.
 ~~2. Customer confirmation email~~ — **Resolved:** Branded HTML email from info@saguarolabs3d.com.
-~~3. Widget styling~~ — **Partially resolved:** Dark industrial/minimalist matching saguarolabs3d.com. Exact hex codes to be confirmed before widget implementation (owner to provide from Squarespace Styles panel).
+~~3. Widget styling~~ — **Resolved:** Full brand palette confirmed from brand assets.
+  - Background: `linear-gradient(135deg, #0D1117, #1A1F2E)`
+  - Primary accent: `#00E5FF` (Cyber Cyan)
+  - Secondary accent: `#FF6D00` (Desert Orange)
+  - Gradient mid: `#00BCD4` (Teal Mid)
+  - Gradient end: `#0D7FA0` (Deep Ocean)
+  - Amber variant: `#FF9100`
+  - Body text: `#FFFFFF`
+  - Logo: "SL" white + "|" Desert Orange + "3D" Cyber Cyan on dark navy
 ~~4. STL upload timing~~ — **Resolved:** Pre-upload to temp Drive folder before Stripe redirect; graceful failure handling if Drive move fails post-payment.
 ~~5. Oversized STL handling~~ — **Resolved:** Files >50MB show clear message directing customer to manual quote form; not auto-rejected, not silently dropped.
