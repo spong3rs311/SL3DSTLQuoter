@@ -449,6 +449,107 @@ async function handlePay(apiBase) {
   window.location.href = checkoutData.url;
 }
 
+// ── Status panel ─────────────────────────────────────────────────────────────
+
+var STATUS_CONFIGS = {
+  success: {
+    icon:  '✓',
+    color: '#00E5FF',
+    title: 'Order confirmed!',
+    body:  'Payment received. We\'ll be in touch once your part goes on the printer.',
+  },
+  cancelled: {
+    icon:  '✕',
+    color: '#8B95A5',
+    title: 'Payment cancelled',
+    body:  'No charge was made. Start a new quote whenever you\'re ready.',
+  },
+  'manual-sent': {
+    icon:  '✓',
+    color: '#00E5FF',
+    title: 'Quote request sent!',
+    body:  'We\'ll review your file and send you a custom price by email.',
+  },
+};
+
+function showStatus(type) {
+  var cfg = STATUS_CONFIGS[type] || STATUS_CONFIGS.success;
+  var iconEl  = document.getElementById('sl3d-status-icon');
+  iconEl.textContent  = cfg.icon;
+  iconEl.style.color  = cfg.color;
+  document.getElementById('sl3d-status-title').textContent = cfg.title;
+  document.getElementById('sl3d-status-body').textContent  = cfg.body;
+  showPanel('status');
+}
+
+function handleStatusParam() {
+  var params = new URLSearchParams(window.location.search);
+  var status = params.get('status');
+  if (status === 'success' || status === 'cancelled') {
+    history.replaceState(null, '', window.location.pathname);
+    showStatus(status);
+  }
+}
+
+function wireStatusPanel() {
+  document.getElementById('sl3d-status-reset').addEventListener('click', function () {
+    state.file            = null;
+    state.volume_cm3      = 0;
+    state.supports_likely = false;
+    state.priceResult     = null;
+    showPanel('upload-zone');
+  });
+}
+
+// ── Manual quote form ─────────────────────────────────────────────────────────
+
+async function handleManualSubmit(apiBase) {
+  var name  = (document.getElementById('sl3d-mq-name').value  || '').trim();
+  var email = (document.getElementById('sl3d-mq-email').value || '').trim();
+  var notes = (document.getElementById('sl3d-mq-notes').value || '').trim();
+
+  if (!name || !email) {
+    showError('Please enter your name and email address.');
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showError('Please enter a valid email address.');
+    return;
+  }
+
+  var btn = document.getElementById('sl3d-mq-submit');
+  btn.disabled    = true;
+  btn.textContent = 'Sending…';
+
+  var formData = new FormData();
+  formData.append('name',  name);
+  formData.append('email', email);
+  if (notes)       formData.append('notes', notes);
+  if (state.file)  formData.append('stl',   state.file);
+
+  try {
+    var res  = await fetch(apiBase + '/api/manual-quote', { method: 'POST', body: formData });
+    var data = await res.json();
+    if (!res.ok) {
+      showError(data.error || 'Failed to send — please try again.');
+      btn.disabled    = false;
+      btn.textContent = 'Send Quote Request';
+      return;
+    }
+    showStatus('manual-sent');
+  } catch (_err) {
+    showError('Failed to send — please check your connection and try again.');
+    btn.disabled    = false;
+    btn.textContent = 'Send Quote Request';
+  }
+}
+
+function wireManualForm(apiBase) {
+  document.getElementById('sl3d-mq-submit').addEventListener('click', function () {
+    handleManualSubmit(apiBase);
+  });
+}
+
 // ── Event wiring ─────────────────────────────────────────────────────────────
 
 function wireUploadZone() {
@@ -508,9 +609,11 @@ function init() {
 
   var apiBase = getApiBase();
   container.innerHTML = HTML;
-  showPanel('upload-zone');
   wireUploadZone();
   wireQuotePanel(apiBase);
+  wireManualForm(apiBase);
+  wireStatusPanel();
+  handleStatusParam();
 }
 
 if (typeof document !== 'undefined') {
@@ -521,4 +624,4 @@ if (typeof document !== 'undefined') {
   }
 }
 
-module.exports = { showPanel, showError, updatePrice, updatePayBtn, handleFile, getApiBase };
+module.exports = { showPanel, showError, showStatus, updatePrice, updatePayBtn, handleFile, getApiBase };
