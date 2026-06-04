@@ -35,14 +35,40 @@ const jestGlobals = {
   jest: 'readonly',
 };
 
+const browserGlobals = {
+  window: 'readonly',
+  document: 'readonly',
+  navigator: 'readonly',
+  location: 'readonly',
+  history: 'readonly',
+  URL: 'readonly',
+  URLSearchParams: 'readonly',
+  FormData: 'readonly',
+  fetch: 'readonly',
+  FileReader: 'readonly',
+  Event: 'readonly',
+  CustomEvent: 'readonly',
+};
+
 module.exports = [
   js.configs.recommended,
   {
-    files: ['api/**/*.js', 'frontend/**/*.js'],
+    files: ['api/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'commonjs',
       globals: nodeGlobals,
+    },
+    rules: {
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['frontend/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: { ...nodeGlobals, ...browserGlobals },
     },
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
