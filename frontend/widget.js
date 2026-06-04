@@ -367,6 +367,88 @@ function handleFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
+// ── Accept & Pay ─────────────────────────────────────────────────────────────
+
+function getApiBase() {
+  var scripts = document.getElementsByTagName('script');
+  for (var i = 0; i < scripts.length; i++) {
+    var src = scripts[i].src || '';
+    if (src.indexOf('/dist/widget.min.js') !== -1) {
+      return src.slice(0, src.indexOf('/dist/widget.min.js'));
+    }
+  }
+  return '';
+}
+
+function resetPayBtn() {
+  var btn = document.getElementById('sl3d-pay-btn');
+  btn.disabled = false;
+  btn.textContent = 'Accept & Pay';
+}
+
+async function handlePay(apiBase) {
+  var btn = document.getElementById('sl3d-pay-btn');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+
+  // Step 1 — upload STL to temp Drive folder
+  var formData = new FormData();
+  formData.append('stl', state.file);
+
+  var uploadData;
+  try {
+    var uploadRes = await fetch(apiBase + '/api/upload-stl', {
+      method: 'POST',
+      body: formData,
+    });
+    uploadData = await uploadRes.json();
+    if (!uploadRes.ok) {
+      showError(uploadData.error || 'Upload failed — please try again.');
+      resetPayBtn();
+      return;
+    }
+  } catch (_err) {
+    showError('Upload failed — please check your connection and try again.');
+    resetPayBtn();
+    return;
+  }
+
+  // Step 2 — create Stripe Checkout session
+  btn.textContent = 'Preparing checkout…';
+
+  var checkoutData;
+  try {
+    var checkoutRes = await fetch(apiBase + '/api/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileId:          uploadData.fileId,
+        driveLink:       uploadData.driveLink,
+        filament_id:     document.getElementById('sl3d-filament').value,
+        strength_preset: document.getElementById('sl3d-strength').value,
+        volume_cm3:      state.volume_cm3,
+        supports_likely: state.supports_likely,
+        stl_filename:    state.file.name,
+        customer_name:   document.getElementById('sl3d-name').value.trim(),
+        customer_email:  document.getElementById('sl3d-email').value.trim(),
+      }),
+    });
+    checkoutData = await checkoutRes.json();
+    if (!checkoutRes.ok) {
+      showError(checkoutData.error || 'Checkout failed — please try again.');
+      resetPayBtn();
+      return;
+    }
+  } catch (_err) {
+    showError('Could not create checkout — please try again.');
+    resetPayBtn();
+    return;
+  }
+
+  // Step 3 — redirect to Stripe
+  window.location.href = checkoutData.url;
+}
+
 // ── Event wiring ─────────────────────────────────────────────────────────────
 
 function wireUploadZone() {
@@ -393,11 +475,15 @@ function wireUploadZone() {
   });
 }
 
-function wireQuotePanel() {
+function wireQuotePanel(apiBase) {
   document.getElementById('sl3d-filament').addEventListener('change', updatePrice);
   document.getElementById('sl3d-strength').addEventListener('change', updatePrice);
   document.getElementById('sl3d-name').addEventListener('input', updatePayBtn);
   document.getElementById('sl3d-email').addEventListener('input', updatePayBtn);
+
+  document.getElementById('sl3d-pay-btn').addEventListener('click', function () {
+    handlePay(apiBase);
+  });
 
   document.getElementById('sl3d-to-manual').addEventListener('click', function () {
     showPanel('manual');
@@ -420,10 +506,11 @@ function init() {
   var container = document.getElementById('sl3d-widget');
   if (!container) return;
 
+  var apiBase = getApiBase();
   container.innerHTML = HTML;
   showPanel('upload-zone');
   wireUploadZone();
-  wireQuotePanel();
+  wireQuotePanel(apiBase);
 }
 
 if (typeof document !== 'undefined') {
@@ -434,4 +521,4 @@ if (typeof document !== 'undefined') {
   }
 }
 
-module.exports = { showPanel, showError, updatePrice, updatePayBtn, handleFile };
+module.exports = { showPanel, showError, updatePrice, updatePayBtn, handleFile, getApiBase };
